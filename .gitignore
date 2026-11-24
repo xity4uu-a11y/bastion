@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/.venv/
+backend/*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+npm-debug.log*
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Local runtime state & databases
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Exported reports & certificates
+*.sarif
+*release-cert*.json
+bastion-cert.json
+bastion.sarif
+
+# BLA generated staging mirrors & backups
+.bla-hardened/
+.blarc
+.bla-sim-backup/
+.bla-backup/
+
+# OS / IDE clutter
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

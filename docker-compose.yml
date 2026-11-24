@@ -1,0 +1,44 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: bastion-backend
+    ports:
+      - "8000:8000"
+    environment:
+      BASTION_API_HOST: "0.0.0.0"
+      BASTION_API_PORT: "8000"
+      BASTION_DATA_DIR: "/app/data"
+      BASTION_CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000"
+      BASTION_CLOUDFLARE_SKILL_DIR: "/app/vendor/security-audit-skill/skills/security-audit"
+    volumes:
+      - bastion_data:/app/data
+      - ./sample-target:/workspace/sample-target
+      # Mount your local repositories directory here to scan host projects from Docker:
+      # - ${HOST_REPOS_DIR:-./sample-target}:/workspace/repos
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    container_name: bastion-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  bastion_data:

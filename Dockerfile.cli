@@ -1,0 +1,103 @@
+# syntax=docker/dockerfile:1.7
+# Bastion v2.1.0 Production CLI Container (AGPL-Clean by Default)
+# Packages: Python 3.11 + Bastion CLI, Node.js 22 LTS (Cloudflare validators + bla-agents), MIT Gitleaks.
+# TruffleHog is intentionally NOT bundled by default (AGPL-3.0). Opt in via --build-arg INSTALL_TRUFFLEHOG=true
+# or mount a user-installed trufflehog binary at runtime.
+
+ARG GITLEAKS_VERSION=8.24.2
+ARG INSTALL_TRUFFLEHOG=false
+
+# =============================================================================
+# Stage 1: Builder (Python wheels + MIT Gitleaks + optional opt-in TruffleHog)
+# =============================================================================
+FROM python:3.11-slim AS builder
+
+ARG GITLEAKS_VERSION
+ARG INSTALL_TRUFFLEHOG
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    tar \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build isolated Python virtualenv with Bastion CLI
+WORKDIR /build
+COPY backend/requirements.txt /build/backend/requirements.txt
+COPY backend/pyproject.toml /build/backend/pyproject.toml
+COPY backend/app /build/backend/app
+
+RUN python -m venv /opt/bastion-venv \
+    && /opt/bastion-venv/bin/pip install --upgrade pip \
+    && /opt/bastion-venv/bin/pip install -r /build/backend/requirements.txt \
+    && /opt/bastion-venv/bin/pip install --no-deps /build/backend
+
+# Install MIT-licensed Gitleaks (default AGPL-clean Gate 1 scanner)
+RUN mkdir -p /opt/bastion-bin \
+    && ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+         amd64) GL_ARCH="x64" ;; \
+         arm64) GL_ARCH="arm64" ;; \
+         *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
+       esac \
+    && curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ARCH}.tar.gz" -o /tmp/gitleaks.tar.gz \
+    && tar -xzf /tmp/gitleaks.tar.gz -C /opt/bastion-bin gitleaks \
+    && chmod 0755 /opt/bastion-bin/gitleaks \
+    && rm -f /tmp/gitleaks.tar.gz
+
+# Optional AGPL opt-in: strictly OFF unless explicitly requested by builder
+RUN if [ "$INSTALL_TRUFFLEHOG" = "true" ]; then \
+      curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /opt/bastion-bin; \
+    fi
+
+# =============================================================================
+# Stage 2: Minimal Non-Root Runtime (Python 3.11 + Node 22 LTS + Gitleaks + BLA)
+# =============================================================================
+FROM python:3.11-slim AS runtime
+
+LABEL org.opencontainers.image.title="Bastion CLI" \
+      org.opencontainers.image.description="3-Stage Pre-Ship Security & Anti-REA Release Gate (AGPL-clean default with MIT Gitleaks)" \
+      org.opencontainers.image.version="2.1.0"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/bastion-venv/bin:/usr/local/bin:${PATH}" \
+    HOME="/home/bastion" \
+    BASTION_KEYS_DIR="/home/bastion/.bastion/keys" \
+    BASTION_DATA_DIR="/tmp/bastion-data" \
+    BASTION_DEFAULT_SECRET_SCANNER="gitleaks" \
+    BASTION_CLOUDFLARE_SKILL_DIR="/opt/bastion/vendor/security-audit-skill/skills/security-audit"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g bla-agents \
+    && npm cache clean --force \
+    && apt-get purge -y --auto-remove gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python virtualenv and Gate 1 scanner binaries from builder
+COPY --from=builder /opt/bastion-venv /opt/bastion-venv
+COPY --from=builder /opt/bastion-bin/ /usr/local/bin/
+COPY vendor/security-audit-skill /opt/bastion/vendor/security-audit-skill
+
+# Create non-root bastion user (UID 10001)
+RUN groupadd --gid 10001 bastion \
+    && useradd --uid 10001 --gid bastion --home-dir /home/bastion --create-home --shell /bin/sh bastion \
+    && mkdir -p /home/bastion/.bastion/keys /tmp/bastion-data /workspace \
+    && chown -R bastion:bastion /home/bastion /tmp/bastion-data /opt/bastion /workspace \
+    && chmod 0700 /home/bastion/.bastion/keys
+
+USER bastion
+WORKDIR /workspace
+
+ENTRYPOINT ["bastion"]
+CMD ["--help"]

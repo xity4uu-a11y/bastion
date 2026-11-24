@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+:root {
+  --bg-canvas: #fbfbfd;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f5f5f7;
+  --bg-hover: #f0f0f3;
+  --bg-terminal: #fafafc;
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
+  --accent-neutral: #1d1d1f;
+  --accent-neutral-fg: #ffffff;
+  --status-pass-fg: #1b7f46;
+  --status-pass-bg: rgba(27, 127, 70, 0.09);
+  --status-pass-border: rgba(27, 127, 70, 0.22);
+  --status-warn-fg: #9a5b00;
+  --status-warn-bg: rgba(180, 108, 0, 0.09);
+  --status-warn-border: rgba(180, 108, 0, 0.24);
+  --status-fail-fg: #c23029;
+  --status-fail-bg: rgba(194, 48, 41, 0.09);
+  --status-fail-border: rgba(194, 48, 41, 0.22);
+  --status-run-fg: #0066cc;
+  --status-run-bg: rgba(0, 102, 204, 0.08);
+  --status-run-border: rgba(0, 102, 204, 0.22);
+}
+
+.dark {
+  --bg-canvas: #0b0b0c;
+  --bg-surface: #141416;
+  --bg-subtle: #1c1c1f;
+  --bg-hover: #242428;
+  --bg-terminal: #101012;
+  --border-subtle: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-primary: #f5f5f7;
+  --text-secondary: #98989d;
+  --text-tertiary: #6e6e73;
+  --accent-neutral: #f5f5f7;
+  --accent-neutral-fg: #0b0b0c;
+  --status-pass-fg: #4cd981;
+  --status-pass-bg: rgba(76, 217, 129, 0.11);
+  --status-pass-border: rgba(76, 217, 129, 0.24);
+  --status-warn-fg: #f0ad4e;
+  --status-warn-bg: rgba(240, 173, 78, 0.11);
+  --status-warn-border: rgba(240, 173, 78, 0.26);
+  --status-fail-fg: #f0655e;
+  --status-fail-bg: rgba(240, 101, 94, 0.11);
+  --status-fail-border: rgba(240, 101, 94, 0.26);
+  --status-run-fg: #58a6ff;
+  --status-run-bg: rgba(88, 166, 255, 0.11);
+  --status-run-border: rgba(88, 166, 255, 0.26);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code,
+pre,
+.font-mono {
+  font-family: var(--font-mono), "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Restrained custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
