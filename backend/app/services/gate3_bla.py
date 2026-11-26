@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -198,6 +199,44 @@ def _build_clean_smoke_env(target_path: Path) -> dict[str, str]:
     return clean
 
 
+_DISALLOWED_SHELL_OPERATORS = frozenset({";", "&", "&&", "|", "||", ">", ">>", "<", "<<", "`"})
+_DISALLOWED_SHELL_BINARIES = frozenset({"sh", "bash", "zsh", "dash", "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe"})
+
+
+def _parse_safe_smoke_argv(cmd: str) -> list[str]:
+    """Tokenize a smoke-test command into an explicit argv list for shell=False execution.
+
+    Rejects unquoted shell chaining operators, newlines, command substitution, and raw shell
+    interpreters to eliminate OS command injection without breaking quoted inline scripts.
+    """
+    if "\n" in cmd or "\r" in cmd or "\x00" in cmd:
+        raise ValueError("Smoke test command must be a single line without control characters.")
+
+    lexer = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    tokens = list(lexer)
+    if not tokens:
+        raise ValueError("Smoke test command is empty.")
+
+    for tok in tokens:
+        if tok in _DISALLOWED_SHELL_OPERATORS:
+            raise ValueError(f"Disallowed shell operator '{tok}' in smoke test command.")
+
+    argv = shlex.split(cmd, posix=True)
+    if not argv:
+        raise ValueError("Smoke test command is empty.")
+
+    exe_name = Path(argv[0]).name.lower()
+    if exe_name in _DISALLOWED_SHELL_BINARIES:
+        raise ValueError(f"Direct shell invocation ('{exe_name}') is not allowed in smoke test commands.")
+
+    # Resolve executable path cleanly on Windows (e.g. npm -> npm.cmd, node -> node.exe)
+    resolved = shutil.which(argv[0])
+    if resolved:
+        argv[0] = resolved
+    return argv
+
+
 def run_post_bla_smoke_test(
     target_path: Path,
     smoke_cmd: str,
@@ -207,6 +246,19 @@ def run_post_bla_smoke_test(
     cmd = (smoke_cmd or "").strip()
     if not cmd:
         return SmokeTestResult(status="skipped", command="", message="No smoke test command configured.")
+
+    try:
+        argv = _parse_safe_smoke_argv(cmd)
+    except ValueError as exc:
+        msg = f"Smoke test command rejected by security policy: {exc}"
+        if run_id:
+            event_bus.emit_log(run_id, 3, msg, "error")
+        return SmokeTestResult(
+            status="failed",
+            command=cmd,
+            exit_code=-2,
+            message=msg,
+        )
 
     timeout = timeout_seconds or settings.smoke_test_timeout_seconds
     mirror_root = target_path / ".bla-hardened"
@@ -245,10 +297,10 @@ def run_post_bla_smoke_test(
         clean_env = _build_clean_smoke_env(target_path)
         try:
             proc = subprocess.run(
-                cmd,
+                argv,
                 cwd=str(sandbox_root),
                 env=clean_env,
-                shell=True,
+                shell=False,
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
